@@ -6,7 +6,7 @@ import requests
 from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier  # For compatibility during deployment
+from sklearn.ensemble import RandomForestClassifier  # Required for compatibility
 
 # ✅ Set page configuration at the very beginning
 st.set_page_config(
@@ -41,7 +41,7 @@ def load_image(image_path):
 def load_model(model_path):
     try:
         return joblib.load(model_path)
-    except (AttributeError, ModuleNotFoundError) as e:
+    except (AttributeError, ModuleNotFoundError, KeyError) as e:
         st.error(f"Failed to load model due to: {e}")
         return None
 
@@ -92,6 +92,9 @@ def run_prediction_process():
     model_dir = "saved_models"
     model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
 
+    successful_models = []
+    failed_models = []
+
     # User-defined model weights from sidebar
     model_weights = {model.replace("_model.pkl", ""): st.session_state.model_weights[model.replace("_model.pkl", "")] for model in model_names}
 
@@ -99,30 +102,46 @@ def run_prediction_process():
         model_path = os.path.join(model_dir, model_name)
         model = load_model(model_path)
         if model is None:
+            failed_models.append(model_name)
             continue  # Skip if the model fails to load
         y_pred = model.predict(X_test_reduced)
 
         model_label = model_name.replace("_model.pkl", "")
         combined_results[f"{model_label}_Predicted"] = y_pred
+        successful_models.append(model_label)
+
+    # Display loaded and failed models
+    if failed_models:
+        st.warning(f"⚠️ Failed to load or predict for models: {', '.join(failed_models)}")
+    if not successful_models:
+        st.error("No models were successfully loaded. Please check the model files.")
+        return
 
     # Weighted Majority Vote Calculation
     st.markdown("### 🏆 Final Weighted Majority Vote Prediction")
-    pred_cols = [f"{model_name.replace('_model.pkl', '')}_Predicted" for model_name in model_names]
+    pred_cols = [f"{model}_Predicted" for model in successful_models]
 
     def weighted_majority_vote(row):
         vote_counter = Counter()
         for model_col in pred_cols:
-            model_label = model_col.replace('_Predicted', '')
-            weight = model_weights.get(model_label, 1)
-            prediction = row[model_col]
-            vote_counter[prediction] += weight
-        return vote_counter.most_common(1)[0][0]
+            if model_col in row:  # Check if prediction exists
+                model_label = model_col.replace('_Predicted', '')
+                weight = model_weights.get(model_label, 1)
+                prediction = row[model_col]
+                vote_counter[prediction] += weight
+        if vote_counter:
+            return vote_counter.most_common(1)[0][0]
+        else:
+            return None
 
+    # Apply weighted majority vote only on valid columns
     combined_results['Weighted_Majority_Vote'] = combined_results[pred_cols].apply(weighted_majority_vote, axis=1)
 
     # Add O/X Comparison and Calculate Accuracy
     accuracy_results = {}
     for model_col in pred_cols + ['Weighted_Majority_Vote']:
+        if model_col not in combined_results.columns:
+            continue  # Skip missing predictions
         result_col = model_col.replace('_Predicted', '') + '_Result'
         combined_results[result_col] = combined_results.apply(lambda row: 'O' if row['Actual'] == row[model_col] else 'X', axis=1)
         correct_predictions = combined_results[result_col].value_counts().get('O', 0)
@@ -131,7 +150,7 @@ def run_prediction_process():
         accuracy_results[model_col.replace('_Predicted', '')] = round(accuracy, 2)
 
     # Display results
-    st.markdown(f"### 📊 Weighted Majority Vote Accuracy: {accuracy_results['Weighted_Majority_Vote']}%")
+    st.markdown(f"### 📊 Weighted Majority Vote Accuracy: {accuracy_results.get('Weighted_Majority_Vote', 0)}%")
     st.dataframe(combined_results)
 
 
