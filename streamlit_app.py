@@ -6,6 +6,7 @@ import requests
 from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
+from sklearn.ensemble import RandomForestClassifier  # Add any other required models
 
 # ✅ Set page configuration at the very beginning
 st.set_page_config(
@@ -35,10 +36,14 @@ def load_lottieurl(url: str):
 def load_image(image_path):
     return Image.open(image_path)
 
-# Load machine learning model
+# Load machine learning model with error handling
 @st.cache_resource
 def load_model(model_path):
-    return joblib.load(model_path)
+    try:
+        return joblib.load(model_path)
+    except ModuleNotFoundError as e:
+        st.error(f"Error loading model: {e}. Ensure all dependencies are in requirements.txt.")
+        return None
 
 # Lottie animation for visual feedback
 lottie_prediction = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json")
@@ -93,6 +98,8 @@ def run_prediction_process():
     for model_name in model_names:
         model_path = os.path.join(model_dir, model_name)
         model = load_model(model_path)
+        if model is None:
+            continue  # Skip if the model fails to load
         y_pred = model.predict(X_test_reduced)
 
         model_label = model_name.replace("_model.pkl", "")
