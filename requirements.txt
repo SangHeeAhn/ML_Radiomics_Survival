@@ -6,3 +6,4 @@ streamlit-lottie
 Pillow
 scikit-learn
 xgboost  
+numpy
