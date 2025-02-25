@@ -6,7 +6,7 @@ import requests
 from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier  # Add any other required models
+from sklearn.ensemble import RandomForestClassifier  # For compatibility during deployment
 
 # ✅ Set page configuration at the very beginning
 st.set_page_config(
@@ -36,13 +36,13 @@ def load_lottieurl(url: str):
 def load_image(image_path):
     return Image.open(image_path)
 
-# Load machine learning model with error handling
+# Load model with error handling for custom objects
 @st.cache_resource
 def load_model(model_path):
     try:
         return joblib.load(model_path)
-    except ModuleNotFoundError as e:
-        st.error(f"Error loading model: {e}. Ensure all dependencies are in requirements.txt.")
+    except (AttributeError, ModuleNotFoundError) as e:
+        st.error(f"Failed to load model due to: {e}")
         return None
 
 # Lottie animation for visual feedback
