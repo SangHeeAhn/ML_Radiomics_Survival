@@ -4,6 +4,6 @@ joblib
 requests
 streamlit-lottie
 Pillow
-scikit-learn
+scikit-learn==1.1.3
 xgboost
 numpy
