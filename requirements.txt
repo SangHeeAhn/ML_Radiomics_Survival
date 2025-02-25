@@ -1,0 +1,6 @@
+streamlit
+pandas
+joblib
+requests
+streamlit-lottie
+Pillow
