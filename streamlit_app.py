@@ -6,16 +6,20 @@ import requests
 from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier  # Required for compatibility
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier  # Example scikit-learn models
 
-# ✅ Set page configuration at the very beginning
+# ----------------------------------------------------
+# 1) Set Page Config FIRST
+# ----------------------------------------------------
 st.set_page_config(
     page_title="Delta Model Prediction with Accuracy Check",
     page_icon=":bar_chart:",
     layout="wide"
 )
 
-# Initialize session state variables
+# ----------------------------------------------------
+# 2) Initialize Session State
+# ----------------------------------------------------
 if 'running' not in st.session_state:
     st.session_state.running = False
 if 'completed_steps' not in st.session_state:
@@ -23,173 +27,196 @@ if 'completed_steps' not in st.session_state:
 if 'model_weights' not in st.session_state:
     st.session_state.model_weights = {}
 
-# Load Lottie animation
+# ----------------------------------------------------
+# 3) Cache Resource: Lottie Animations, Images, Models
+# ----------------------------------------------------
 @st.cache_resource
 def load_lottieurl(url: str):
+    """Loads a Lottie animation from a given URL."""
     response = requests.get(url)
     if response.status_code != 200:
         return None
     return response.json()
 
-# Load machine learning-related image
 @st.cache_resource
 def load_image(image_path):
+    """Loads an image (e.g., PNG) using Pillow."""
     return Image.open(image_path)
 
-# Load model with error handling for custom objects
 @st.cache_resource
 def load_model(model_path):
+    """
+    Tries to load a scikit-learn model using joblib.
+    Returns None if there's a version mismatch or a missing module.
+    """
     try:
         return joblib.load(model_path)
     except (AttributeError, ModuleNotFoundError, KeyError) as e:
-        st.error(f"Failed to load model due to: {e}")
+        st.error(f"Failed to load model '{model_path}' due to: {e}")
         return None
 
-# Lottie animation for visual feedback
+# ----------------------------------------------------
+# 4) Load Lottie Animations (used in UI)
+# ----------------------------------------------------
 lottie_prediction = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json")
 
-
-# Function to run the prediction process
+# ----------------------------------------------------
+# 5) Main Prediction Process
+# ----------------------------------------------------
 def run_prediction_process():
     st.markdown("### 🔍 Running Prediction Process")
     uploaded_file = st.session_state.uploaded_file
 
     if uploaded_file is None:
-        st.error("No CSV uploaded yet.")
+        st.error("No CSV uploaded. Please upload a file on the left sidebar.")
         return
 
-    # Load the CSV
+    # 5a) Load CSV Data
     test_data = pd.read_csv(uploaded_file)
     st.dataframe(test_data)
 
-    # Clean data
+    # 5b) Drop columns with NaN values
     test_data_cleaned = test_data.dropna(axis=1)
+
+    # 5c) Check for required columns
     required_cols = ['Patient_ID', 'LMS', 'Survival', 'PD']
     existing_cols = [col for col in required_cols if col in test_data_cleaned.columns]
     X_test = test_data_cleaned.drop(columns=existing_cols)
 
-    # Load selected features
+    # 5d) Load Feature Info
     features_file_path = os.path.join('Lasso_feature', 'selected_features.pkl')
     selected_features = joblib.load(features_file_path)
 
-    # Validate features
+    # 5e) Validate that the CSV has the features we need
     available_features = list(X_test.columns)
-    valid_features = [feature for feature in selected_features if feature in available_features]
-
+    valid_features = [f for f in selected_features if f in available_features]
     if not valid_features:
-        st.error("No valid features found for prediction.")
+        st.error("No valid features found in the CSV to match your selected_features.pkl.")
         return
 
     X_test_reduced = X_test[valid_features]
 
-    # Prepare DataFrame for results
+    # 5f) Prepare results DataFrame
     combined_results = pd.DataFrame({
         'Patient_ID': test_data_cleaned['Patient_ID'] if 'Patient_ID' in test_data_cleaned.columns else range(len(X_test_reduced)),
-        'Actual': test_data_cleaned['LMS'] if 'LMS' in test_data_cleaned.columns else pd.Series([None] * len(X_test_reduced))
+        'Actual': test_data_cleaned['LMS'] if 'LMS' in test_data_cleaned.columns else pd.Series([None]*len(X_test_reduced))
     })
 
-    # Model predictions and assign weights
+    # 5g) Load Models and Predict
     model_dir = "saved_models"
     model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
 
+    # Store which models loaded successfully vs. failed
     successful_models = []
     failed_models = []
 
-    # User-defined model weights from sidebar
-    model_weights = {model.replace("_model.pkl", ""): st.session_state.model_weights[model.replace("_model.pkl", "")] for model in model_names}
+    # Retrieve user-set weights from sidebar
+    model_weights = {m.replace("_model.pkl", ""): st.session_state.model_weights[m.replace("_model.pkl", "")]
+                     for m in model_names}
 
     for model_name in model_names:
         model_path = os.path.join(model_dir, model_name)
         model = load_model(model_path)
         if model is None:
+            # Model didn't load properly
             failed_models.append(model_name)
-            continue  # Skip if the model fails to load
-        y_pred = model.predict(X_test_reduced)
+            continue
 
+        # If loaded successfully, do predictions
+        y_pred = model.predict(X_test_reduced)
         model_label = model_name.replace("_model.pkl", "")
         combined_results[f"{model_label}_Predicted"] = y_pred
         successful_models.append(model_label)
 
-    # Display loaded and failed models
+    # 5h) Notify user if any models failed
     if failed_models:
         st.warning(f"⚠️ Failed to load or predict for models: {', '.join(failed_models)}")
+
     if not successful_models:
-        st.error("No models were successfully loaded. Please check the model files.")
+        st.error("No models were successfully loaded. Check your model files / environment.")
         return
 
-    # Weighted Majority Vote Calculation
+    # 5i) Weighted Majority Vote
     st.markdown("### 🏆 Final Weighted Majority Vote Prediction")
-    pred_cols = [f"{model}_Predicted" for model in successful_models]
+    pred_cols = [f"{m}_Predicted" for m in successful_models]
 
     def weighted_majority_vote(row):
+        from collections import Counter
         vote_counter = Counter()
-        for model_col in pred_cols:
-            if model_col in row:  # Check if prediction exists
-                model_label = model_col.replace('_Predicted', '')
-                weight = model_weights.get(model_label, 1)
-                prediction = row[model_col]
+        for col in pred_cols:
+            model_label = col.replace('_Predicted', '')
+            weight = model_weights.get(model_label, 1.0)
+            if col in row:
+                prediction = row[col]
                 vote_counter[prediction] += weight
-        if vote_counter:
-            return vote_counter.most_common(1)[0][0]
-        else:
-            return None
+        # Return the class with the highest weighted count
+        return vote_counter.most_common(1)[0][0] if vote_counter else None
 
-    # Apply weighted majority vote only on valid columns
     combined_results['Weighted_Majority_Vote'] = combined_results[pred_cols].apply(weighted_majority_vote, axis=1)
 
-    # Add O/X Comparison and Calculate Accuracy
+    # 5j) Accuracy + O/X Mark
     accuracy_results = {}
-    for model_col in pred_cols + ['Weighted_Majority_Vote']:
-        if model_col not in combined_results.columns:
-            continue  # Skip missing predictions
-        result_col = model_col.replace('_Predicted', '') + '_Result'
-        combined_results[result_col] = combined_results.apply(lambda row: 'O' if row['Actual'] == row[model_col] else 'X', axis=1)
-        correct_predictions = combined_results[result_col].value_counts().get('O', 0)
-        total_predictions = len(combined_results)
-        accuracy = (correct_predictions / total_predictions) * 100
-        accuracy_results[model_col.replace('_Predicted', '')] = round(accuracy, 2)
+    for col in pred_cols + ['Weighted_Majority_Vote']:
+        if col not in combined_results.columns:
+            continue
+        result_col = col.replace('_Predicted', '') + '_Result'
+        combined_results[result_col] = combined_results.apply(
+            lambda r: 'O' if r['Actual'] == r[col] else 'X',
+            axis=1
+        )
+        correct_preds = combined_results[result_col].value_counts().get('O', 0)
+        total = len(combined_results)
+        accuracy = round((correct_preds / total)*100, 2)
+        accuracy_results[col.replace('_Predicted', '')] = accuracy
 
-    # Display results
-    st.markdown(f"### 📊 Weighted Majority Vote Accuracy: {accuracy_results.get('Weighted_Majority_Vote', 0)}%")
+    # 5k) Display final accuracy & results
+    st.markdown(f"**Weighted Majority Vote Accuracy**: {accuracy_results.get('Weighted_Majority_Vote', 0)}%")
     st.dataframe(combined_results)
 
-
-# Sidebar Controls
+# ----------------------------------------------------
+# 6) Sidebar Controls
+# ----------------------------------------------------
 def display_sidebar():
     st.sidebar.title("⚙️ Control Panel")
     st.sidebar.write("---")
 
-    # Upload CSV
+    # 6a) File Uploader for CSV
     uploaded_file = st.sidebar.file_uploader("📁 Upload CSV for Prediction", type="csv")
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
 
-    # Set model weights dynamically for models
+    # 6b) Dynamic Model Weights
     model_dir = "saved_models"
-    model_names = [f.replace("_model.pkl", "") for f in os.listdir(model_dir) if f.endswith(".pkl")]
+    model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
+    # Convert the file name to a label without "_model.pkl"
+    models_labels = [m.replace("_model.pkl", "") for m in model_names]
 
     st.sidebar.markdown("### 🎯 Set Model Weights")
-    for model in model_names:
-        st.session_state.model_weights[model] = st.sidebar.slider(f"{model} Weight", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
+    for label in models_labels:
+        st.session_state.model_weights[label] = st.sidebar.slider(
+            f"{label} Weight", min_value=0.0, max_value=2.0, value=1.0, step=0.1
+        )
 
-    # Run Prediction
+    # 6c) Button to run prediction
     if st.sidebar.button("▶️ Run Prediction"):
         st.session_state.running = True
         run_prediction_process()
 
-
-# Main App Execution
+# ----------------------------------------------------
+# 7) Main Execution
+# ----------------------------------------------------
 def main():
-    # Display animation
+    # 7a) Display Lottie Animation
     st_lottie(lottie_prediction, height=200, key="prediction_animation")
 
-    # Main Title
+    # 7b) Main Title
     st.title("🔬 Delta Model Predictions with Weighted Majority Vote and Accuracy Check")
 
-    # Sidebar controls
+    # 7c) Show Sidebar
     display_sidebar()
 
-
-# Run Streamlit App
+# ----------------------------------------------------
+# 8) Run App
+# ----------------------------------------------------
 if __name__ == "__main__":
     main()
