@@ -7,6 +7,13 @@ from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
 
+# ✅ Set page configuration at the very beginning
+st.set_page_config(
+    page_title="Delta Model Prediction with Accuracy Check",
+    page_icon=":bar_chart:",
+    layout="wide"
+)
+
 # Initialize session state variables
 if 'running' not in st.session_state:
     st.session_state.running = False
@@ -28,14 +35,13 @@ def load_lottieurl(url: str):
 def load_image(image_path):
     return Image.open(image_path)
 
-# Lottie animation for visual feedback
-lottie_prediction = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json")
-
-
-# Function to load models
+# Load machine learning model
 @st.cache_resource
 def load_model(model_path):
     return joblib.load(model_path)
+
+# Lottie animation for visual feedback
+lottie_prediction = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json")
 
 
 # Function to run the prediction process
@@ -148,12 +154,6 @@ def display_sidebar():
 
 # Main App Execution
 def main():
-    st.set_page_config(
-        page_title="Delta Model Prediction with Accuracy Check",
-        page_icon=":bar_chart:",
-        layout="wide"
-    )
-
     # Display animation
     st_lottie(lottie_prediction, height=200, key="prediction_animation")
 
