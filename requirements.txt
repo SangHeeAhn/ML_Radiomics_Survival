@@ -4,3 +4,5 @@ joblib
 requests
 streamlit-lottie
 Pillow
+scikit-learn
+xgboost  
