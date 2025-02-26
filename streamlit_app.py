@@ -61,7 +61,7 @@ def load_model(model_path):
 lottie_prediction = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json")
 
 # ----------------------------------------------------
-# 5) Custom Styles
+# 5) Custom Styles (글자 크기 2단계 증가)
 # ----------------------------------------------------
 def set_custom_styles():
     st.markdown("""
@@ -84,9 +84,10 @@ def set_custom_styles():
         font-weight: bold;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     }
-    h1, h2, h3 {
-        color: #2d3436;
-    }
+    h1 { font-size: 2.5em !important; }
+    h2 { font-size: 2em !important; }
+    h3 { font-size: 1.75em !important; }
+    h4 { font-size: 1.5em !important; }
     .stButton>button {
         background-color: #0984e3;
         color: #fff;
@@ -153,7 +154,6 @@ def run_prediction_process():
 
     model_names = [f for f in files_in_saved_models if f.endswith(".pkl")]
 
-    # Store which models loaded successfully vs. failed
     successful_models = []
     failed_models = []
 
@@ -170,7 +170,6 @@ def run_prediction_process():
             failed_models.append(model_name)
             continue
 
-        # If loaded successfully, do predictions
         y_pred = model.predict(X_test_reduced)
         model_label = model_name.replace("_model.pkl", "")
         combined_results[f"{model_label}_Predicted"] = y_pred
@@ -217,9 +216,12 @@ def run_prediction_process():
     total_patients = len(combined_results)
     summary_md = f"**Total Patients:** {total_patients}  \n" + \
                  f"**Weighted Majority Vote Accuracy:** {accuracy_results.get('Weighted_Majority_Vote', 0)}%\n"
+    # 각 모델의 정확도도 요약에 포함 (모델별)
+    for model in successful_models:
+        summary_md += f"**{model} Accuracy:** {accuracy_results.get(model, 'N/A')}%\n"
 
-    # 6k) Display results in separate tabs
-    tab_list = [f"{m} Prediction" for m in successful_models] + ['Weighted Majority Vote']
+    # 6k) Display results in separate tabs (Weighted Majority Vote 탭을 가장 먼저 표시)
+    tab_list = ['Weighted Majority Vote'] + [f"{m} Prediction" for m in successful_models]
     tabs = st.tabs(tab_list)
 
     for i, tab_name in enumerate(tab_list):
@@ -233,6 +235,7 @@ def run_prediction_process():
             else:
                 model_label = tab_name.replace(" Prediction", "")
                 st.subheader(f"🔍 {model_label} Model Results")
+                st.markdown(f"**Accuracy:** {accuracy_results.get(model_label, 'N/A')}%")
                 st.dataframe(combined_results[["Patient_ID", "Actual", f"{model_label}_Predicted"]])
 
     # 6l) Save results to CSV file
