@@ -198,29 +198,11 @@ def run_prediction_process():
 
     combined_results['Weighted_Majority_Vote'] = combined_results[pred_cols].apply(weighted_majority_vote, axis=1)
 
-    # 6i) Accuracy + O/X Mark Calculation for each model and overall vote
-    accuracy_results = {}
-    for col in pred_cols + ['Weighted_Majority_Vote']:
-        if col not in combined_results.columns:
-            continue
-        result_col = col.replace('_Predicted', '') + '_Result'
-        combined_results[result_col] = combined_results.apply(
-            lambda r: 'O' if r['Actual'] == r[col] else 'X',
-            axis=1
-        )
-        correct_preds = combined_results[result_col].value_counts().get('O', 0)
-        total = len(combined_results)
-        accuracy = round((correct_preds / total) * 100, 2)
-        accuracy_results[col.replace('_Predicted', '')] = accuracy
-
-    # 6j) Prepare summary info for analysis
+    # 6i) Prepare summary info for analysis (예: 전체 환자 수)
     total_patients = len(combined_results)
-    summary_md = f"**Total Patients:** {total_patients}  \n" + \
-                 f"**Weighted Majority Vote Accuracy:** {accuracy_results.get('Weighted_Majority_Vote', 0)}%\n"
-    for model in successful_models:
-        summary_md += f"**{model} Accuracy:** {accuracy_results.get(model, 'N/A')}%\n"
+    summary_md = f"**Total Patients:** {total_patients}  \n"
 
-    # 6k) Display results in separate tabs (Weighted Majority Vote 탭을 가장 먼저 표시)
+    # 6j) Display results in separate tabs (Weighted Majority Vote 탭을 가장 먼저 표시)
     tab_list = ['Weighted Majority Vote'] + [f"{m} Prediction" for m in successful_models]
     tabs = st.tabs(tab_list)
 
@@ -230,17 +212,18 @@ def run_prediction_process():
                 st.markdown("<div class='weighted-vote-tab'>", unsafe_allow_html=True)
                 st.subheader("🏆 Final Weighted Majority Vote Results")
                 st.write(summary_md)
-                st.dataframe(combined_results[['Patient_ID', 'Actual', 'Weighted_Majority_Vote'] + pred_cols])
+                st.dataframe(combined_results[['Patient_ID', 'Weighted_Majority_Vote'] + pred_cols])
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 model_label = tab_name.replace(" Prediction", "")
                 st.subheader(f"🔍 {model_label} Model Results")
-                st.markdown(f"**Accuracy:** {accuracy_results.get(model_label, 'N/A')}%")
-                st.dataframe(combined_results[["Patient_ID", "Actual", f"{model_label}_Predicted"]])
+                st.dataframe(combined_results[["Patient_ID", f"{model_label}_Predicted"]])
 
-    # 6l) Save results to CSV file and provide download button
+    # 6k) Save results to CSV file (예측된 결과값만 저장: Patient_ID 및 각 모델 예측값, Weighted Majority Vote)
+    # 실제 저장되는 CSV에는 'Actual' 및 O/X 결과는 제외됨.
+    final_columns = ['Patient_ID'] + [f"{m}_Predicted" for m in successful_models] + ['Weighted_Majority_Vote']
     csv_buffer = StringIO()
-    combined_results.to_csv(csv_buffer, index=False)
+    combined_results[final_columns].to_csv(csv_buffer, index=False)
     csv_data = csv_buffer.getvalue()
 
     st.download_button(
