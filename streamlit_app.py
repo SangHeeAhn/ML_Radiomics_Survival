@@ -219,26 +219,27 @@ def run_prediction_process():
                 st.subheader(f"🔍 {model_label} Model Results")
                 st.dataframe(combined_results[["Patient_ID", f"{model_label}_Predicted"]])
 
-    # 6k) Save results to CSV file (예측된 결과값만 저장: Patient_ID 및 각 모델 예측값, Weighted Majority Vote)
-    # 실제 저장되는 CSV에는 'Actual' 및 O/X 결과는 제외됨.
+    # 6k) Save results to CSV file (예측된 결과값만 저장: Patient_ID, 각 모델 예측값, Weighted Majority Vote)
     final_columns = ['Patient_ID'] + [f"{m}_Predicted" for m in successful_models] + ['Weighted_Majority_Vote']
     csv_buffer = StringIO()
     combined_results[final_columns].to_csv(csv_buffer, index=False)
     csv_data = csv_buffer.getvalue()
 
-    st.download_button(
-        label="⬇️ Download CSV Results",
-        data=csv_data,
-        file_name="Radiomics_Delta_model_predictions_weighted_vote.csv",
-        mime="text/csv"
-    )
+    # 별도의 컨테이너에 다운로드 버튼 배치 (결과 화면은 그대로 남음)
+    with st.container():
+        st.download_button(
+            label="⬇️ Download CSV Results",
+            data=csv_data,
+            file_name="Radiomics_Delta_model_predictions_weighted_vote.csv",
+            mime="text/csv"
+        )
     st.success("✅ Analysis complete! CSV file is ready for download.")
 
 # ----------------------------------------------------
 # 7) Sidebar Controls
 # ----------------------------------------------------
 def display_sidebar():
-    st.sidebar.title("Samsung Medical Center-RO")
+    st.sidebar.title("Samsung Medical Cente")
     st.sidebar.write("---")
 
     # 7a) File Uploader for CSV
