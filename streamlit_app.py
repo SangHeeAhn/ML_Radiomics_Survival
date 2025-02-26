@@ -239,7 +239,7 @@ def run_prediction_process():
 # 7) Sidebar Controls
 # ----------------------------------------------------
 def display_sidebar():
-    st.sidebar.title("Samsung Medical Cente")
+    st.sidebar.title("Samsung Medical Center")
     st.sidebar.write("---")
 
     # 7a) File Uploader for CSV
