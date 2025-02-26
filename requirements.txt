@@ -7,3 +7,4 @@ Pillow
 scikit-learn==1.4.0
 xgboost
 numpy
+cloudpickle
