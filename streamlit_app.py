@@ -52,7 +52,6 @@ def load_model(model_path):
     try:
         return joblib.load(model_path)
     except (AttributeError, ModuleNotFoundError, KeyError) as e:
-        # 여기서 _loss 모듈처럼 내부 경로 에러가 나면 건너뛰도록 함.
         st.warning(f"Skipped loading model '{model_path}' due to error: {e}")
         return None
 
@@ -62,7 +61,47 @@ def load_model(model_path):
 lottie_prediction = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_5njp3vgg.json")
 
 # ----------------------------------------------------
-# 5) Main Prediction Process
+# 5) Custom Styles
+# ----------------------------------------------------
+def set_custom_styles():
+    st.markdown("""
+    <style>
+    body {
+        background: linear-gradient(to bottom, #f5f5f5, #dfe6e9);
+    }
+    .block-container {
+        background-color: #ffffff;
+        padding: 2rem 2rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 2rem;
+    }
+    .weighted-vote-tab {
+        background-color: #fdf2d5;
+        padding: 1.5rem;
+        border-radius: 10px;
+        color: #8a6d3b;
+        font-weight: bold;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    h1, h2, h3 {
+        color: #2d3436;
+    }
+    .stButton>button {
+        background-color: #0984e3;
+        color: #fff;
+        border-radius: 10px;
+        font-size: 18px;
+    }
+    .stButton>button:hover {
+        background-color: #74b9ff;
+        color: #2d3436;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ----------------------------------------------------
+# 6) Main Prediction Process
 # ----------------------------------------------------
 def run_prediction_process():
     st.markdown("### 🔍 Running Prediction Process")
@@ -72,23 +111,23 @@ def run_prediction_process():
         st.error("No CSV uploaded. Please upload a file on the left sidebar.")
         return
 
-    # 5a) Load CSV Data
+    # 6a) Load CSV Data
     test_data = pd.read_csv(uploaded_file)
     st.dataframe(test_data)
 
-    # 5b) Drop columns with NaN values
+    # 6b) Drop columns with NaN values
     test_data_cleaned = test_data.dropna(axis=1)
 
-    # 5c) Check for required columns
+    # 6c) Check for required columns and remove them from features
     required_cols = ['Patient_ID', 'LMS', 'Survival', 'PD']
     existing_cols = [col for col in required_cols if col in test_data_cleaned.columns]
     X_test = test_data_cleaned.drop(columns=existing_cols)
 
-    # 5d) Load Feature Info
+    # 6d) Load Feature Info
     features_file_path = os.path.join('Lasso_feature', 'selected_features.pkl')
     selected_features = joblib.load(features_file_path)
 
-    # 5e) Validate that the CSV has the features we need
+    # 6e) Validate that the CSV has the required features
     available_features = list(X_test.columns)
     valid_features = [f for f in selected_features if f in available_features]
     if not valid_features:
@@ -97,16 +136,14 @@ def run_prediction_process():
 
     X_test_reduced = X_test[valid_features]
 
-    # 5f) Prepare results DataFrame
+    # 6f) Prepare results DataFrame with Patient_ID and Actual outcome
     combined_results = pd.DataFrame({
         'Patient_ID': test_data_cleaned['Patient_ID'] if 'Patient_ID' in test_data_cleaned.columns else range(len(X_test_reduced)),
         'Actual': test_data_cleaned['LMS'] if 'LMS' in test_data_cleaned.columns else pd.Series([None]*len(X_test_reduced))
     })
 
-    # 5g) Load Models and Predict
+    # 6g) Load Models and perform predictions
     model_dir = "saved_models"
-
-    # (추가) saved_models 폴더 상태를 먼저 확인
     try:
         files_in_saved_models = os.listdir(model_dir)
         st.write("Files in 'saved_models' directory:", files_in_saved_models)
@@ -130,7 +167,6 @@ def run_prediction_process():
         model_path = os.path.join(model_dir, model_name)
         model = load_model(model_path)
         if model is None:
-            # Model didn't load properly
             failed_models.append(model_name)
             continue
 
@@ -140,7 +176,6 @@ def run_prediction_process():
         combined_results[f"{model_label}_Predicted"] = y_pred
         successful_models.append(model_label)
 
-    # 5h) Notify user if any models failed
     if failed_models:
         st.warning(f"⚠️ Failed to load or predict for models: {', '.join(failed_models)}")
 
@@ -148,12 +183,10 @@ def run_prediction_process():
         st.error("No models were successfully loaded. Check your model files / environment.")
         return
 
-    # 5i) Weighted Majority Vote
-    st.markdown("### 🏆 Final Weighted Majority Vote Prediction")
+    # 6h) Weighted Majority Vote Calculation
     pred_cols = [f"{m}_Predicted" for m in successful_models]
 
     def weighted_majority_vote(row):
-        from collections import Counter
         vote_counter = Counter()
         for col in pred_cols:
             model_label = col.replace('_Predicted', '')
@@ -161,12 +194,11 @@ def run_prediction_process():
             if col in row:
                 prediction = row[col]
                 vote_counter[prediction] += weight
-        # Return the class with the highest weighted count
         return vote_counter.most_common(1)[0][0] if vote_counter else None
 
     combined_results['Weighted_Majority_Vote'] = combined_results[pred_cols].apply(weighted_majority_vote, axis=1)
 
-    # 5j) Accuracy + O/X Mark
+    # 6i) Accuracy + O/X Mark Calculation for each model and overall vote
     accuracy_results = {}
     for col in pred_cols + ['Weighted_Majority_Vote']:
         if col not in combined_results.columns:
@@ -178,26 +210,49 @@ def run_prediction_process():
         )
         correct_preds = combined_results[result_col].value_counts().get('O', 0)
         total = len(combined_results)
-        accuracy = round((correct_preds / total)*100, 2)
+        accuracy = round((correct_preds / total) * 100, 2)
         accuracy_results[col.replace('_Predicted', '')] = accuracy
 
-    # 5k) Display final accuracy & results
-    st.markdown(f"**Weighted Majority Vote Accuracy**: {accuracy_results.get('Weighted_Majority_Vote', 0)}%")
-    st.dataframe(combined_results)
+    # 6j) Prepare summary info for analysis
+    total_patients = len(combined_results)
+    summary_md = f"**Total Patients:** {total_patients}  \n" + \
+                 f"**Weighted Majority Vote Accuracy:** {accuracy_results.get('Weighted_Majority_Vote', 0)}%\n"
+
+    # 6k) Display results in separate tabs
+    tab_list = [f"{m} Prediction" for m in successful_models] + ['Weighted Majority Vote']
+    tabs = st.tabs(tab_list)
+
+    for i, tab_name in enumerate(tab_list):
+        with tabs[i]:
+            if tab_name == 'Weighted Majority Vote':
+                st.markdown("<div class='weighted-vote-tab'>", unsafe_allow_html=True)
+                st.subheader("🏆 Final Weighted Majority Vote Results")
+                st.write(summary_md)
+                st.dataframe(combined_results[['Patient_ID', 'Actual', 'Weighted_Majority_Vote'] + pred_cols])
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                model_label = tab_name.replace(" Prediction", "")
+                st.subheader(f"🔍 {model_label} Model Results")
+                st.dataframe(combined_results[["Patient_ID", "Actual", f"{model_label}_Predicted"]])
+
+    # 6l) Save results to CSV file
+    output_file = "Delta_model_predictions_weighted_vote.csv"
+    combined_results.to_csv(output_file, index=False)
+    st.success(f"✅ Analysis complete! Results saved as '{output_file}'.")
 
 # ----------------------------------------------------
-# 6) Sidebar Controls
+# 7) Sidebar Controls
 # ----------------------------------------------------
 def display_sidebar():
     st.sidebar.title("⚙️ Control Panel")
     st.sidebar.write("---")
 
-    # 6a) File Uploader for CSV
+    # 7a) File Uploader for CSV
     uploaded_file = st.sidebar.file_uploader("📁 Upload CSV for Prediction", type="csv")
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
 
-    # 6b) Dynamic Model Weights
+    # 7b) Dynamic Model Weights
     model_dir = "saved_models"
     try:
         model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
@@ -216,26 +271,29 @@ def display_sidebar():
             value=st.session_state.model_weights[label], step=0.1
         )
 
-    # 6c) Button to run prediction
+    # 7c) Button to run prediction
     if st.sidebar.button("▶️ Run Prediction"):
         st.session_state.running = True
         run_prediction_process()
 
 # ----------------------------------------------------
-# 7) Main Execution
+# 8) Main Execution
 # ----------------------------------------------------
 def main():
-    # 7a) Display Lottie Animation
+    # Apply custom styles
+    set_custom_styles()
+
+    # Display Lottie Animation
     st_lottie(lottie_prediction, height=200, key="prediction_animation")
 
-    # 7b) Main Title
+    # Main Title
     st.title("🔬 Delta Model Predictions with Weighted Majority Vote and Accuracy Check")
 
-    # 7c) Show Sidebar
+    # Sidebar Controls
     display_sidebar()
 
 # ----------------------------------------------------
-# 8) Run App
+# 9) Run App
 # ----------------------------------------------------
 if __name__ == "__main__":
     main()
