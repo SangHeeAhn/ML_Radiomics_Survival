@@ -13,7 +13,7 @@ from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier 
 # 1) Set Page Config FIRST
 # ----------------------------------------------------
 st.set_page_config(
-    page_title="Delta Model Prediction with Accuracy Check",
+    page_title="Radiomics Delta Model Prediction with Accuracy Check",
     page_icon=":bar_chart:",
     layout="wide"
 )
@@ -246,7 +246,7 @@ def run_prediction_process():
     st.download_button(
         label="⬇️ Download CSV Results",
         data=csv_data,
-        file_name="Delta_model_predictions_weighted_vote.csv",
+        file_name="Radiomics_Delta_model_predictions_weighted_vote.csv",
         mime="text/csv"
     )
     st.success("✅ Analysis complete! CSV file is ready for download.")
@@ -255,7 +255,7 @@ def run_prediction_process():
 # 7) Sidebar Controls
 # ----------------------------------------------------
 def display_sidebar():
-    st.sidebar.title("⚙️ Control Panel")
+    st.sidebar.title("Samsung Medical Center-RO")
     st.sidebar.write("---")
 
     # 7a) File Uploader for CSV
@@ -298,7 +298,7 @@ def main():
     st_lottie(lottie_prediction, height=200, key="prediction_animation")
 
     # Main Title
-    st.title("🔬 Delta Model Predictions with Weighted Majority Vote and Accuracy Check")
+    st.title("🔬 Radiomics Delta Model Survival Predictions with Weighted Majority Vote")
 
     # Sidebar Controls
     display_sidebar()
