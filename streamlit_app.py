@@ -6,6 +6,7 @@ import requests
 from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
+from io import StringIO
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier  # 예시 scikit-learn models
 
 # ----------------------------------------------------
@@ -216,7 +217,6 @@ def run_prediction_process():
     total_patients = len(combined_results)
     summary_md = f"**Total Patients:** {total_patients}  \n" + \
                  f"**Weighted Majority Vote Accuracy:** {accuracy_results.get('Weighted_Majority_Vote', 0)}%\n"
-    # 각 모델의 정확도도 요약에 포함 (모델별)
     for model in successful_models:
         summary_md += f"**{model} Accuracy:** {accuracy_results.get(model, 'N/A')}%\n"
 
@@ -238,10 +238,18 @@ def run_prediction_process():
                 st.markdown(f"**Accuracy:** {accuracy_results.get(model_label, 'N/A')}%")
                 st.dataframe(combined_results[["Patient_ID", "Actual", f"{model_label}_Predicted"]])
 
-    # 6l) Save results to CSV file
-    output_file = "Delta_model_predictions_weighted_vote.csv"
-    combined_results.to_csv(output_file, index=False)
-    st.success(f"✅ Analysis complete! Results saved as '{output_file}'.")
+    # 6l) Save results to CSV file and provide download button
+    csv_buffer = StringIO()
+    combined_results.to_csv(csv_buffer, index=False)
+    csv_data = csv_buffer.getvalue()
+
+    st.download_button(
+        label="⬇️ Download CSV Results",
+        data=csv_data,
+        file_name="Delta_model_predictions_weighted_vote.csv",
+        mime="text/csv"
+    )
+    st.success("✅ Analysis complete! CSV file is ready for download.")
 
 # ----------------------------------------------------
 # 7) Sidebar Controls
