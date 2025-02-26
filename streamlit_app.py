@@ -6,7 +6,7 @@ import requests
 from streamlit_lottie import st_lottie
 from PIL import Image
 from collections import Counter
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier  # Example scikit-learn models
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier  # 예시 scikit-learn models
 
 # ----------------------------------------------------
 # 1) Set Page Config FIRST
@@ -52,7 +52,8 @@ def load_model(model_path):
     try:
         return joblib.load(model_path)
     except (AttributeError, ModuleNotFoundError, KeyError) as e:
-        st.error(f"Failed to load model '{model_path}' due to: {e}")
+        # 여기서 _loss 모듈처럼 내부 경로 에러가 나면 건너뛰도록 함.
+        st.warning(f"Skipped loading model '{model_path}' due to error: {e}")
         return None
 
 # ----------------------------------------------------
@@ -104,15 +105,26 @@ def run_prediction_process():
 
     # 5g) Load Models and Predict
     model_dir = "saved_models"
-    model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
+
+    # (추가) saved_models 폴더 상태를 먼저 확인
+    try:
+        files_in_saved_models = os.listdir(model_dir)
+        st.write("Files in 'saved_models' directory:", files_in_saved_models)
+    except FileNotFoundError:
+        st.error(f"Directory '{model_dir}' does not exist or is not accessible.")
+        return
+
+    model_names = [f for f in files_in_saved_models if f.endswith(".pkl")]
 
     # Store which models loaded successfully vs. failed
     successful_models = []
     failed_models = []
 
     # Retrieve user-set weights from sidebar
-    model_weights = {m.replace("_model.pkl", ""): st.session_state.model_weights[m.replace("_model.pkl", "")]
-                     for m in model_names}
+    model_weights = {
+        m.replace("_model.pkl", ""): st.session_state.model_weights.get(m.replace("_model.pkl", ""), 1.0)
+        for m in model_names
+    }
 
     for model_name in model_names:
         model_path = os.path.join(model_dir, model_name)
@@ -187,14 +199,21 @@ def display_sidebar():
 
     # 6b) Dynamic Model Weights
     model_dir = "saved_models"
-    model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
-    # Convert the file name to a label without "_model.pkl"
+    try:
+        model_names = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
+    except FileNotFoundError:
+        st.sidebar.warning(f"Directory '{model_dir}' not found.")
+        model_names = []
+
     models_labels = [m.replace("_model.pkl", "") for m in model_names]
 
     st.sidebar.markdown("### 🎯 Set Model Weights")
     for label in models_labels:
+        if label not in st.session_state.model_weights:
+            st.session_state.model_weights[label] = 1.0
         st.session_state.model_weights[label] = st.sidebar.slider(
-            f"{label} Weight", min_value=0.0, max_value=2.0, value=1.0, step=0.1
+            f"{label} Weight", min_value=0.0, max_value=2.0,
+            value=st.session_state.model_weights[label], step=0.1
         )
 
     # 6c) Button to run prediction
